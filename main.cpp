@@ -1,48 +1,64 @@
 #include <vector>
 #include <sstream>
 #include <iomanip>
+#include <iostream>
+#include <cstdlib>
 #include "function.h"
 
 int main(int argc, char *argv[])
 {
     //std::cout << std::setprecision(16);
-    if (argc < 2)
+    f64 r_cut = 10.0;
+    bool mode_periodique = false;
+    std::string nom_fichier;
+    unsigned int N_particules_local;
+    unsigned int N_sym = 27;
+
+    if (argc < 3) 
     {
-        fprintf(stderr, "Utilisez: %s particule.xyz N_particules_local\n", argv[0]);
+        fprintf(stderr, "Utilisez: %s particule.xyz N_particules_local mode_periodique\n", argv[0]);
         return EXIT_FAILURE;
     }
 
-    // Déclaration des variables
-    std::string nom_fichier = argv[1];
-    unsigned int N_particules_local = atoi(argv[2]);
+    // Lecture des arguments
+    nom_fichier = argv[1];
+    N_particules_local = atoi(argv[2]);
+    mode_periodique = atoi(argv[3]); // 1 = périodique, 0 = non périodique
+    //r_cut = atof(argv[4]); // Rayon de coupure
 
-    unsigned int nbr_particules = getNbrParticules(nom_fichier);
-    std::cout << "nbr particule :" << nbr_particules << std::endl;
+    // Affichage des paramètres d'entrée
+    std::cout << "Mode périodique : " << (mode_periodique ? "Oui" : "Non") << std::endl;
+    //std::cout << "Rayon de coupure : " << r_cut << std::endl;
+
+    // Vérifier le nombre de particules dans le fichier
+    unsigned int nbr_particules = get_nombre_particules(nom_fichier);
+    std::cout << "Nombre de particules : " << nbr_particules << std::endl;
+
     if (nbr_particules > N_particules_total)
     {
-        std::cerr << "Attention le nombre de particule est supérieur à 1000" << std::endl;
-        exit(EXIT_FAILURE);
+        std::cerr << "Attention, le nombre de particules dépasse la limite de 1000." << std::endl;
+        return EXIT_FAILURE;
     }
 
     if (N_particules_local > nbr_particules)
     {
-        std::cout << "Le nombre de particule local doit être inférieur à " << nbr_particules << std::endl;
+        std::cerr << "Le nombre de particules locales doit être inférieur ou égal à " << nbr_particules << std::endl;
         return EXIT_FAILURE;
     }
 
+    // Lecture des particules depuis le fichier
     Particules particules;
-    std::string ligne;
-    // Ouverture et lecture des articules dans le fichier d'entrée
     std::ifstream fichier(nom_fichier);
-    // Activation de l'exception
+
     if (!fichier.is_open())
     {
-        std::cerr << "Une erreur est survenue lors de l'ouverture du fichier pour le comptage du nombre de particule" << std::endl;
-        exit(EXIT_FAILURE);
+        std::cerr << "Erreur lors de l'ouverture du fichier : " << nom_fichier << std::endl;
+        return EXIT_FAILURE;
     }
-    std::getline(fichier, ligne);
-    
-    //variable temporaire contenant les types de particules, sans importance dans notre cas.
+
+    std::string ligne;
+    std::getline(fichier, ligne); // Ignorer la première ligne (nombre de particules)
+
     while (std::getline(fichier, ligne))
     {
         std::stringstream ss(ligne);
@@ -52,19 +68,31 @@ int main(int argc, char *argv[])
         particules.x.push_back(x);
         particules.y.push_back(y);
         particules.z.push_back(z);
-        //std::cout<<"x: "<<x<< " y: "<<y<<" z: "<<z<<std::endl;
     }
-    
-    std::cout<<"x : "<<particules.x.back()<<"y :"<<particules.y.back()<<"z :"<<particules.z.back()<<std::endl;
-    
+
     fichier.close();
 
+    // Initialisation des forces
     f64 U = 0.0;
     init_force(particules, N_particules_local);
-    calcul_energie_force_LJ(particules, N_particules_local, &U);
-    std::cout<<"Energie totale du système: " << U <<std::endl;
-    //std::cout<<"Energie totale du système (LJ) : " << calcul_potentiel_LJ(particules, N_particules_local)<<std::endl;
-    //calcul_force_LJ(particules, N_particules_local);
+
+    // Calcul de l'énergie et des forces selon le mode
+
+    if (mode_periodique)
+    {
+        std::cout << "Calcul avec conditions périodiques..." << std::endl;
+    }
+    else
+    {
+        std::cout << "Calcul sans conditions périodiques..." << std::endl;
+    }
+
+    calcul_energie_force_LJ(particules, N_particules_local, mode_periodique, &U, r_cut, N_sym);
+
+    // Afficher les résultats
+    std::cout << "Énergie totale du système : " << U << std::endl;
+
+    // Vérifier que la somme des forces est proche de zéro
     verifier_valeur_force(particules.fx, particules.fy, particules.fz, N_particules_local);
 
     return EXIT_SUCCESS;
