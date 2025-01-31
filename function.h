@@ -1,5 +1,4 @@
-#ifndef __FUNCTION__H__
-#define __FUNCTION__H__
+#pragma once 
 
 #include <string>
 #include <iostream>
@@ -69,4 +68,3 @@ void init_force(Particules& p, unsigned int taille);
 //Verification de la nullitée des forces 
 void verifier_valeur_force(const std::vector<f64>& fx, const std::vector<f64>& fy, const std::vector<f64>& fz, unsigned int taille );
 
-#endif

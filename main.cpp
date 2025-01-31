@@ -16,7 +16,7 @@ int main(int argc, char *argv[])
 
     if (argc < 3) 
     {
-        fprintf(stderr, "Utilisez: %s particule.xyz N_particules_local mode_periodique\n", argv[0]);
+        fprintf(stderr, "Utilisez: %s particule.xyz N_particules_local mode_periodique(1|0)\n", argv[0]);
         return EXIT_FAILURE;
     }
 
@@ -24,11 +24,9 @@ int main(int argc, char *argv[])
     nom_fichier = argv[1];
     N_particules_local = atoi(argv[2]);
     mode_periodique = atoi(argv[3]); // 1 = périodique, 0 = non périodique
-    //r_cut = atof(argv[4]); // Rayon de coupure
 
     // Affichage des paramètres d'entrée
     std::cout << "Mode périodique : " << (mode_periodique ? "Oui" : "Non") << std::endl;
-    //std::cout << "Rayon de coupure : " << r_cut << std::endl;
 
     // Vérifier le nombre de particules dans le fichier
     unsigned int nbr_particules = get_nombre_particules(nom_fichier);

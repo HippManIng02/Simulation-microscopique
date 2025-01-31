@@ -48,9 +48,9 @@ f64 calcul_de_r_etoile_div_par_r__2(f64 r_carree, f64 r_e_carree)
 f64 potentiel_lennard_jones(f64 r_carree, f64 r_e_carree, f64 n_epsilon)
 {
     f64 tmp_2 = calcul_de_r_etoile_div_par_r__2(r_carree, r_e_carree);
-    f64 tmp_6 = tmp_2 * tmp_2 * tmp_2;                    // ((r*)/(r))⁶
-    f64 tmp_12 = tmp_6 * tmp_6;                           //((r*)²/(r)²)⁶ * ((r*)²/(r)²)⁶ = ((r*)²/(r)²)¹²
-    return n_epsilon * (tmp_12 - (2 * tmp_6)); // 4 * epsilon * [(r*)²/(r)²)¹² - 2* ((r*)²/(r)²)⁶]
+    f64 tmp_6 = tmp_2 * tmp_2 * tmp_2;   // ((r*)/(r))⁶
+    f64 tmp_12 = tmp_6 * tmp_6;          //((r*)²/(r)²)⁶ * ((r*)²/(r)²)⁶ = ((r*)²/(r)²)¹²
+    return n_epsilon * (tmp_12 - tmp_6); // 4 * epsilon * [(r*)²/(r)²)¹² - 2* ((r*)²/(r)²)⁶]
 }
 
 // Calcul de la force de Lennard jones, (dérivée du potentiel)
@@ -60,9 +60,8 @@ f64 force_lennard_jones(f64 r_carree, f64 r_e_carree, f64 n_epsilon)
     f64 tmp_6 = tmp_2 * tmp_2 * tmp_2;                                 // ((r*)/(r))⁶
     f64 tmp_8 = tmp_6 * tmp_2;                                         // ((r*)²/(r)²)⁴
     f64 tmp_14 = tmp_6 * tmp_6 * tmp_2;                                //(r*)²/(r)²)¹⁴
-    return -48 * n_epsilon * (tmp_14 - tmp_8);                        // -48 * epsilon * [(r*)²/(r)²)¹⁴ - ((r*)²/(r)²)⁸]
+    return -48 * n_epsilon * (tmp_14 - tmp_8);                         // -48 * epsilon * [(r*)²/(r)²)¹⁴ - ((r*)²/(r)²)⁸]
 }
-
 
 // Calcul de l'énergie et de la force en utilisant le potentiel de Lennard Jones
 void calcul_energie_force_LJ(Particules &p, unsigned int taille, bool mode_periodique, f64 *U, f64 r_cut, unsigned int N_sym, f64 r_e_carree, f64 n_epsilon)
@@ -73,46 +72,48 @@ void calcul_energie_force_LJ(Particules &p, unsigned int taille, bool mode_perio
     const f64 r_cut_effectif = mode_periodique ? r_cut : std::numeric_limits<f64>::max();
     const f64 multiplicateur_potentiel = mode_periodique ? 2.0 : 4.0;
 
-    for (unsigned int i_sym = 0; i_sym < n_sym_effectif; i_sym++) 
+    for (unsigned int i_sym = 0; i_sym < n_sym_effectif; i_sym++)
     {
-        for (unsigned int i = 0; i < taille; i++) 
+        for (unsigned int i = 0; i < taille; i++)
         {
             f64 x = p.x[i];
             f64 y = p.y[i];
             f64 z = p.z[i];
 
-            for (unsigned int j = i + 1; j < taille; j++) 
+            for (unsigned int j = i + 1; j < taille; j++)
             {
-                f64 x_j = p.x[j] + (mode_periodique ? vecteurs_t.x[i_sym] : 0.0);
-                f64 y_j = p.y[j] + (mode_periodique ? vecteurs_t.y[i_sym] : 0.0);
-                f64 z_j = p.z[j] + (mode_periodique ? vecteurs_t.z[i_sym] : 0.0);
+                if (i != j)
+                {
+                    f64 x_j = p.x[j] + (mode_periodique ? vecteurs_t.x[i_sym] : 0.0);
+                    f64 y_j = p.y[j] + (mode_periodique ? vecteurs_t.y[i_sym] : 0.0);
+                    f64 z_j = p.z[j] + (mode_periodique ? vecteurs_t.z[i_sym] : 0.0);
 
-                f64 r_carree = calcul_distance_carree(x, y, z, x_j, y_j, z_j);
+                    f64 r_carree = calcul_distance_carree(x, y, z, x_j, y_j, z_j);
 
-                if (r_carree >= r_cut_effectif) continue;
+                    if (r_carree < r_cut_effectif * r_cut_effectif)
+                    {
+                        *U += potentiel_lennard_jones(r_carree, r_e_carree, n_epsilon);
 
-                *U += potentiel_lennard_jones(r_carree, r_e_carree, n_epsilon);
+                        f64 force = force_lennard_jones(r_carree, r_e_carree, n_epsilon);
 
-                f64 force = force_lennard_jones(r_carree, r_e_carree, n_epsilon);
+                        f64 dx = x - x_j;
+                        f64 dy = y - y_j;
+                        f64 dz = z - z_j;
 
-                f64 dx = x - x_j;
-                f64 dy = y - y_j;
-                f64 dz = z - z_j;
+                        p.fx[i] += (force * dx);
+                        p.fy[i] += (force * dy);
+                        p.fz[i] += (force * dz);
 
-                p.fx[i] += (force * dx);
-                p.fy[i] += (force * dy);
-                p.fz[i] += (force * dz);
-
-                p.fx[j] -= (force * dx);
-                p.fy[j] -= (force * dy);
-                p.fz[j] -= (force * dz);
+                        p.fx[j] -= (force * dx);
+                        p.fy[j] -= (force * dy);
+                        p.fz[j] -= (force * dz);
+                    }
+                }
             }
         }
     }
     *U *= multiplicateur_potentiel;
 }
-
-
 
 // Initialisation des forces à 0
 void init_force(Particules &p, unsigned int taille)
