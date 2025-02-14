@@ -1,13 +1,12 @@
 #include <vector>
 #include <sstream>
-#include <iomanip>
 #include <iostream>
 #include <cstdlib>
 #include "function.h"
 
 int main(int argc, char *argv[])
 {
-    //std::cout << std::setprecision(16);
+    // std::cout << std::setprecision(16);
     f64 r_cut = 10.0;
     bool mode_periodique = false;
     std::string nom_fichier;
@@ -16,7 +15,7 @@ int main(int argc, char *argv[])
     uint n_iterations;
     uint m_step;
 
-    if (argc != 6) 
+    if (argc != 6)
     {
         fprintf(stderr, "Utilisez: %s particule.xyz N_particules_local nbr_iter m_step mode_periodique(1|0)\n", argv[0]);
         return EXIT_FAILURE;
@@ -32,6 +31,7 @@ int main(int argc, char *argv[])
 
     // Affichage des paramètres d'entrée
     std::cout << "Mode périodique : " << (mode_periodique ? "Oui" : "Non") << std::endl;
+    std::cout << "m step : " << m_step << std::endl;
 
     // Vérifier le nombre de particules dans le fichier
     uint nbr_particules = get_nombre_particules(nom_fichier);
@@ -65,6 +65,7 @@ int main(int argc, char *argv[])
     while (std::getline(fichier, ligne))
     {
         std::stringstream ss(ligne);
+        ss >> std::setprecision(15);
         f64 x, y, z;
         int tmp;
         ss >> tmp >> x >> y >> z;
@@ -88,55 +89,76 @@ int main(int argc, char *argv[])
     {
         std::cout << "Calcul sans conditions périodiques..." << std::endl;
     }
-    
 
-    //Calcul de moment cinétique initiale
-    calcul_moments_cinetiques(particules, N_particules_local);
-    //Correction du moment cinétique pour la conservation du centre de masse
+    // Calcul de moment cinétique initiale
+    calcul_moments_cinetiques_init(particules, N_particules_local);
+    //correction rapport
+    correction_rapport(particules, N_particules_local);
+    // Correction du moment cinétique pour la conservation du centre de masse
     correction_moments_cinetiques(particules, N_particules_local);
+    //correction rapport
+    correction_rapport(particules, N_particules_local);
 
     f64 U = 0.0;
-    //Boucle de simulation
+    // Boucle de simulation
     f64 EC, TC;
-    for(uint iter = 0; iter < n_iterations; iter++){
-        
-        //Mise à jour des forces et de l'énergie potentielle
-        calcul_energie_force_LJ(particules, N_particules_local, mode_periodique, &U, r_cut, N_sym);
-    
-        //Intégration avec Velocity-Verlet
-        velocity_verlet(particules, N_particules_local, r_cut, N_sym);
 
-        //Calcul de l'énergie cinétique
-        calcul_energie_cinetique(particules, N_particules_local, &EC, &TC);
+    calcul_energie_cinetique_temperature(particules, N_particules_local, &EC, &TC);
 
-        U = 0.0;
+    // Mise à jour des forces et de l'énergie potentielle
+    calcul_energie_force_LJ(particules, N_particules_local, mode_periodique, &U, r_cut, N_sym);
 
-        calcul_energie_LJ(particules, N_particules_local, mode_periodique, &U, r_cut, N_sym);
+    calcul_energie_cinetique_temperature(particules, N_particules_local, &EC, &TC);
+    std::cout     << " | E_cinétique = " << EC
+    << " | E_total = " << U + EC
+                  << " | Température = " << TC << " K"
+                  << std::endl;
 
-         //correction après m_step itération
-        if(iter % m_step == 0 ){
+
+    for (uint iter = 1; iter <= n_iterations; iter++)
+    {
+        // Intégration avec Velocity-Verlet
+        velocity_verlet(particules, N_particules_local, r_cut,&U, mode_periodique ,N_sym);
+
+        // Calcul de l'énergie cinétique
+        calcul_energie_cinetique_temperature(particules, N_particules_local, &EC, &TC);
+
+         // correction après m_step itération
+        if (iter % m_step == 0)
+        {
             correction_moment_cinetique_thermostat_berendsen(particules, N_particules_local, TC, GAMMA, T0);
         }
 
         f64 E_totale = U + EC;
 
+        f64 Px = 0.0, Py = 0.0, Pz = 0.0;
+        for (uint i = 0; i < N_particules_local; i++)
+        {
+            Px += particules.Mx[i];
+            Py += particules.My[i];
+            Pz += particules.Mz[i];
+        }
+
+        // std::cout << "Fx0 = " << particules.fx[0] << std::endl;
+        // std::cout << "Fy0 = " << particules.fy[0] << std::endl;
+        // std::cout << "Fz0 = " << particules.fz[0] << std::endl;
+        std::cout << "Px = " << Px<<" Py = "<< Py <<" Pz = "<< Pz << std::endl;
         std::cout << "Iteration " << iter
-                  << " | E_potentiel = "<< U
+                  << " | E_potentiel = " << U
                   << " | E_cinétique = " << EC
-                  << " | Température = " << TC << " K" 
+                  << " | Température = " << TC << " K"
                   << " | E_totale = " << E_totale << std::endl;
-        
+
         // Vérifier que la somme des forces est proche de zéro
         verifier_valeur_force(particules.fx, particules.fy, particules.fz, N_particules_local);
+        sauvegarder_trajectoire_PDB(particules,N_particules_local, "trajectoires.pdb", iter, L,L,L);
+
     }
-
-    
-
     // Afficher les résultats
-   // std::cout << "Énergie totale du système : " << U << std::endl;
+    // std::cout << "Énergie totale du système : " << U << std::endl;
 
     // Vérifier que la somme des forces est proche de zéro
-    //verifier_valeur_force(particules.fx, particules.fy, particules.fz, N_particules_local);
+    // verifier_valeur_force(particules.fx, particules.fy, particules.fz, N_particules_local);
 
     return EXIT_SUCCESS;
 }

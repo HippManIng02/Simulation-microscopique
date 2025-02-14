@@ -26,52 +26,26 @@ uint get_nombre_particules(const std::string &nom_fichier)
 }
 
 // calcul de distance au carrée
-f64 calcul_distance_carree(f64 x_1, f64 y_1, f64 z_1, f64 x_2, f64 y_2, f64 z_2)
+f64 calcul_distance_carree(f64 dx, f64 dy, f64 dz)
 {
-    f64 x = x_1 - x_2;
-    f64 y = y_1 - y_2;
-    f64 z = z_1 - z_2;
-    //std::cout << " r.x :" << x << " | r.y :" << y << " | r.z :" << z << std::endl;
-    return (x * x) + (y * y) + (z * z);
-}
-
-// calcul du terme (r*)²/(r)²
-f64 calcul_de_r_etoile_div_par_r__2(f64 r_carree, f64 r_e_carree)
-{
+    f64 r_carree = (dx * dx) + (dy * dy) + (dz * dz);
     if (r_carree == 0)
     {
         std::cerr << "Attention, la valeur de r² = 0" << std::endl;
         exit(EXIT_FAILURE);
     }
-    return r_e_carree / r_carree;
+    return r_carree;
 }
 
-// Calcul du potentiel de Lennard jones
-f64 potentiel_lennard_jones(f64 r_carree, f64 r_e_carree, f64 n_epsilon)
-{
-    f64 tmp_2 = calcul_de_r_etoile_div_par_r__2(r_carree, r_e_carree);
-    f64 tmp_6 = tmp_2 * tmp_2 * tmp_2;   // ((r*)/(r))⁶
-    f64 tmp_12 = tmp_6 * tmp_6;          //((r*)²/(r)²)⁶ * ((r*)²/(r)²)⁶ = ((r*)²/(r)²)¹²
-    return n_epsilon * (tmp_12 - tmp_6); // 4 * epsilon * [(r*)²/(r)²)¹² - 2* ((r*)²/(r)²)⁶]
-}
-
-// Calcul de la force de Lennard jones, (dérivée du potentiel)
-f64 force_lennard_jones(f64 r_carree, f64 r_e_carree, f64 n_epsilon)
-{
-    f64 tmp_2 = calcul_de_r_etoile_div_par_r__2(r_carree, r_e_carree); // (r*)²/(r)²
-    f64 tmp_6 = tmp_2 * tmp_2 * tmp_2;                                 // ((r*)/(r))⁶
-    f64 tmp_8 = tmp_6 * tmp_2;                                         // ((r*)²/(r)²)⁴
-    f64 tmp_14 = tmp_6 * tmp_6 * tmp_2;                                //(r*)²/(r)²)¹⁴
-    return -48 * n_epsilon * (tmp_14 - tmp_8);                         // -48 * epsilon * [(r*)²/(r)²)¹⁴ - ((r*)²/(r)²)⁸]
-}
-
-// Calcul de l'énergie et de la force en utilisant le potentiel de Lennard Jones
+//Calcul de l'énergie et de la force en utilisant le potentiel de Lennard Jones
 void calcul_energie_force_LJ(Particules &p, uint taille, bool mode_periodique, f64 *U, f64 r_cut, uint N_sym, f64 r_e_carree, f64 n_epsilon)
 {
+    init_force(p, taille);
+
     vecteurs_translation vecteurs_t;
-    const uint n_sym_effectif = mode_periodique ? N_sym : 1;
-    const f64 r_cut_effectif = mode_periodique ? r_cut : std::numeric_limits<f64>::max();
-    const f64 multiplicateur_potentiel = mode_periodique ? 2.0 : 4.0;
+    const uint n_sym_effectif = mode_periodique == 1 ? N_sym : 1;
+    const f64 r_cut_effectif = mode_periodique == 1 ? r_cut : std::numeric_limits<f64>::max();
+    const f64 multiplicateur_potentiel = mode_periodique == 1 ? 2.0 : 4.0;
 
     for (uint i_sym = 0; i_sym < n_sym_effectif; i_sym++)
     {
@@ -80,26 +54,32 @@ void calcul_energie_force_LJ(Particules &p, uint taille, bool mode_periodique, f
             f64 x = p.x[i];
             f64 y = p.y[i];
             f64 z = p.z[i];
-
             for (uint j = 0; j < taille; j++)
             {
                 if (i != j)
                 {
-                    f64 x_j = p.x[j] + (mode_periodique ? vecteurs_t.x[i_sym] : 0.0);
-                    f64 y_j = p.y[j] + (mode_periodique ? vecteurs_t.y[i_sym] : 0.0);
-                    f64 z_j = p.z[j] + (mode_periodique ? vecteurs_t.z[i_sym] : 0.0);
+                   // std::cout<< "x : " << vecteurs_t.x[i_sym] << "y : " <<  vecteurs_t.y[i_sym] << "z :" << vecteurs_t.z[i_sym] << std::endl;
+                    f64 x_j = p.x[j] +  vecteurs_t.x[i_sym];
+                    f64 y_j = p.y[j] +  vecteurs_t.y[i_sym];
+                    f64 z_j = p.z[j] +  vecteurs_t.z[i_sym]; 
 
-                    f64 r_carree = calcul_distance_carree(x, y, z, x_j, y_j, z_j);
+                   // std::cout<< "x : " << x_j << "y : " <<  y_j << "z :" << z_j << std::endl;
+                   f64 dx = x - x_j;
+                   f64 dy = y - y_j;
+                   f64 dz = z - z_j;
 
-                    if (r_carree < r_cut_effectif * r_cut_effectif)
+                    f64 r_carree = calcul_distance_carree(dx, dy, dz);
+
+                    if (r_carree <= r_cut_effectif * r_cut_effectif)
                     {
-                        *U += potentiel_lennard_jones(r_carree, r_e_carree, n_epsilon);
 
-                        f64 force = force_lennard_jones(r_carree, r_e_carree, n_epsilon);
+                        f64 r_3 = r_carree * r_carree * r_carree; // (r)^3
+                        f64 r_6 = r_3 * r_3; // (r)^6
+                        std::cout << std::fixed << std::setprecision(15);
 
-                        f64 dx = x - x_j;
-                        f64 dy = y - y_j;
-                        f64 dz = z - z_j;
+                        *U += n_epsilon * ((r_etoile_12 / r_6) - (r_etoile_6 / r_3));
+
+                        f64 force = -48.0 * n_epsilon * (((r_etoile_12 * r_e_carree)/(r_6 * r_carree)) - ((r_etoile_6 * r_e_carree)/(r_3 * r_carree))); 
 
                         p.fx[i] += (force * dx);
                         p.fy[i] += (force * dy);
@@ -113,156 +93,102 @@ void calcul_energie_force_LJ(Particules &p, uint taille, bool mode_periodique, f
             }
         }
     }
-    *U *= multiplicateur_potentiel;
+    *U = (*U) * multiplicateur_potentiel;
 }
 
-
-//Calcul de l'énergie en utilisant le potentiel de Lennard Jones
-void calcul_energie_LJ(Particules& p, uint taille, bool mode_periodique, f64 *U,f64 r_cut, uint N_sym,f64 r_e_carree, f64 n_epsilon){
-    
-    vecteurs_translation vecteurs_t;
-    const uint n_sym_effectif = mode_periodique ? N_sym : 1;
-    const f64 r_cut_effectif = mode_periodique ? r_cut : std::numeric_limits<f64>::max();
-    const f64 multiplicateur_potentiel = mode_periodique ? 2.0 : 4.0;
-
-    for (uint i_sym = 0; i_sym < n_sym_effectif; i_sym++)
-    {
-        for (uint i = 0; i < taille; i++)
-        {
-            f64 x = p.x[i];
-            f64 y = p.y[i];
-            f64 z = p.z[i];
-
-            for (uint j = 0; j < taille; j++)
-            {
-                if (i != j)
-                {
-                    f64 x_j = p.x[j] + (mode_periodique ? vecteurs_t.x[i_sym] : 0.0);
-                    f64 y_j = p.y[j] + (mode_periodique ? vecteurs_t.y[i_sym] : 0.0);
-                    f64 z_j = p.z[j] + (mode_periodique ? vecteurs_t.z[i_sym] : 0.0);
-
-                    f64 r_carree = calcul_distance_carree(x, y, z, x_j, y_j, z_j);
-
-                    if (r_carree < r_cut_effectif * r_cut_effectif)
-                    {
-                        *U += potentiel_lennard_jones(r_carree, r_e_carree, n_epsilon);
-                    }
-                }
-            }
-        }
-    }
-    *U *= multiplicateur_potentiel;
-}
 
 // Algorithme de velocity-verlet
-void velocity_verlet(Particules &p, uint taille, f64 r_cut, uint N_sym, f64 r_e_carree, f64 n_epsilon)
+void velocity_verlet(Particules &p, uint taille, f64 r_cut, f64 *U, bool mode_periodique,uint N_sym, f64 r_e_carree, f64 n_epsilon)
 {
     // Mise à jour des vitesses intermédiaires
-    // f64 inv_masse = 1.0 / MASSE_PARTICULE;
-
-    // f64 dt_par_2 = dt * 0.5;
-    // f64 tmp =  inv_masse * dt_par_2;
-
     for (uint i = 0; i < taille; i++)
     {
-        p.vx[i] += ((p.fx[i] * dt * CONVERSION_FORCE) / (MASSE_PARTICULE * 2.0f));
-        p.vy[i] += ((p.fy[i] * dt * CONVERSION_FORCE) / (MASSE_PARTICULE * 2.0f));
-        p.vz[i] += ((p.fz[i] * dt * CONVERSION_FORCE) / (MASSE_PARTICULE * 2.0f));
-    }
+        p.Mx[i] -= (p.fx[i] * dt * CONVERSION_FORCE * 0.5);
+        p.My[i] -= (p.fy[i] * dt * CONVERSION_FORCE * 0.5);
+        p.Mz[i] -= (p.fz[i] * dt * CONVERSION_FORCE * 0.5);
 
-    // Mise à jour des positions
-    for (uint i = 0; i < taille; i++)
-    {
-        p.x[i] += p.vx[i] * dt;
-        p.y[i] += p.vy[i] * dt;
-        p.z[i] += p.vz[i] * dt;
+        // Mise à jour des positions
+        p.x[i] += (p.Mx[i] / MASSE_PARTICULE) * dt;
+        p.y[i] += (p.My[i] / MASSE_PARTICULE) * dt;
+        p.z[i] += (p.Mz[i] / MASSE_PARTICULE) * dt;
     }
-
     // Mise à jour des forces
-    f64 U_temp = 0.0f;
-
-    init_force(p, taille);
-    calcul_energie_force_LJ(p, taille, 1, &U_temp, r_cut, N_sym, r_e_carree, n_epsilon);
-
+    *U = 0.0;
+    calcul_energie_force_LJ(p, taille, mode_periodique, U, r_cut, N_sym);
     // Correction des vitesses finales et calcul du moment cinétique
-    // f64 masse_mul_conv_force = MASSE_PARTICULE * CONVERSION_FORCE;
+
     for (uint i = 0; i < taille; i++)
     {
-        p.vx[i] += ((p.fx[i] * dt * CONVERSION_FORCE) / (MASSE_PARTICULE * 2.0f));
-        p.vy[i] += ((p.fy[i] * dt * CONVERSION_FORCE) / (MASSE_PARTICULE * 2.0f));
-        p.vz[i] += ((p.fz[i] * dt * CONVERSION_FORCE) / (MASSE_PARTICULE * 2.0f));
-
         // Moment cinétique Moment = Masse * Vitesse
-        p.Mx[i] = p.vx[i] * MASSE_PARTICULE;
-        p.My[i] = p.vy[i] * MASSE_PARTICULE;
-        p.Mz[i] = p.vz[i] * MASSE_PARTICULE;
+        //std::cout<< "Mx : " << p.Mx[i] << " My : " <<  p.My[i] << " Mz :" << p.Mz[i] << std::endl;
+        p.Mx[i] -= (p.fx[i] * dt * CONVERSION_FORCE * 0.5);
+        p.My[i] -= (p.fy[i] * dt * CONVERSION_FORCE * 0.5);
+        p.Mz[i] -= (p.fz[i] * dt * CONVERSION_FORCE * 0.5);
+        //std::cout<< "Mx2 : " << p.Mx[i] << " My2 : " <<  p.My[i] << " Mz2 :" << p.Mz[i] << std::endl;
     }
 }
 
 // Calcul de l'énergie cinétique
-void calcul_energie_cinetique(const Particules &p, uint taille, f64 *EC, f64 *TC)
+void calcul_energie_cinetique_temperature(const Particules &p, uint taille, f64 *EC, f64 *TC)
 {
     // Initialisation de l'énergie cinétique et la température
-    *EC = 0.0f;
     *TC = 0.0f;
 
     // Nombre de degrés de liberté
-    int Ndl = 3 * taille - 3;
+    uint Ndl = 3 * taille - 3;
 
     // Calcul de l'energie cinématique
-    for (uint i = 0; i < taille; i++)
-    {
-        *EC += (p.Mx[i] * p.Mx[i] + p.My[i] * p.My[i] + p.Mz[i] * p.Mz[i]);
-    }
-
-    // Application du facteur de conversion
-    *EC *= (1.0f / (CONVERSION_FORCE * 2.0f * MASSE_PARTICULE));
+    calcul_energie_cinetique(p, taille, EC);
 
     // Calcul de la température
-    *TC = (1.0f / (Ndl * CONSTANTE_R)) * (*EC);
+    *TC = (1.0 / (Ndl * CONSTANTE_R)) * (*EC);
 }
 
 // Fonction signe
 f64 fonction_signe(f64 valeur, f64 s)
 {
-    return (s < 0.5) ? valeur : -valeur;
+    return (s < 0.0) ? -valeur : valeur;
 }
 
 // Génération des moments cinétiques et recabrage pour T0 = 300 K
-void calcul_moments_cinetiques(Particules &p, uint taille)
+void calcul_moments_cinetiques_init(Particules &p, uint taille)
 {
     std::srand(42);
-    double c, s;
+    f64 c, s;
     // Initialisation de comments cinématiques
     for (uint i = 0; i < taille; i++)
     {
         c = (f64) rand()/RAND_MAX;
         s = (f64) rand()/RAND_MAX;
-        p.Mx[i] = fonction_signe(1.0f, 0.5f - s) * c;
+        p.Mx[i] = fonction_signe(1.0, 0.5 - s) * c;
 
         c = (f64) rand()/RAND_MAX;
         s = (f64) rand()/RAND_MAX;
-        p.My[i] = fonction_signe(1.0f, 0.5f - s) * c;
+        p.My[i] = fonction_signe(1.0, 0.5 - s) * c;
 
         c = (f64) rand()/RAND_MAX;
         s = (f64) rand()/RAND_MAX;
-        p.Mz[i] = fonction_signe(1.0f, 0.5f - s) * c;
- 
+        p.Mz[i] = fonction_signe(1.0, 0.5 - s) * c;
     }
+}
 
-    // calcul de l'énergie cinétique initiale
-    f64 energie_cinetique_initial = 0.0;
-    int Ndl = 3 * taille - 3;
 
+//calcul de l'énergie cinétique
+void calcul_energie_cinetique(const Particules &p, uint &taille, f64 *EC){
+    *EC = 0.0;
     for (uint i = 0; i < taille; i++)
     {
-        energie_cinetique_initial += (p.Mx[i] * p.Mx[i] + p.My[i] * p.My[i] + p.Mz[i] * p.Mz[i]);
+        *EC = *EC + ((p.Mx[i] * p.Mx[i] + p.My[i] * p.My[i] + p.Mz[i] * p.Mz[i]) / MASSE_PARTICULE);
     }
+    *EC = *EC * (1.0 / (CONVERSION_FORCE * 2.0));
+}
 
-    // Application du facteur de conversion
-    energie_cinetique_initial *= 1.0 / (2.0 * CONVERSION_FORCE * MASSE_PARTICULE);
-
-    // Calcul du facteur de correction
+//correction rapport
+void correction_rapport(Particules &p, uint &taille){
+    uint Ndl = 3 * taille - 3;
+    f64 energie_cinetique_initial = 0.0;
+    calcul_energie_cinetique(p, taille, &energie_cinetique_initial);
+    
     f64 RAPPORT = (Ndl * CONSTANTE_R * T0) / energie_cinetique_initial;
 
     RAPPORT = sqrt(RAPPORT);
@@ -273,13 +199,6 @@ void calcul_moments_cinetiques(Particules &p, uint taille)
         p.My[i] *= RAPPORT;
         p.Mz[i] *= RAPPORT;
     }
-
-    // for (uint i = 0; i < taille; i++)
-    // {
-    //     std::cout<<" My[] = " << p.My[i] << std::endl;
-    //     std::cout<<" Mz[] = " << p.Mz[i] << std::endl;
-    // }
-    
 }
 
 // Correction du moment cinétique par rapport au centre de masse
@@ -309,13 +228,54 @@ void correction_moments_cinetiques(Particules &p, uint taille)
 
 //Correction moment cinétique à l'aide du thermostat de Berendsen
 void correction_moment_cinetique_thermostat_berendsen(Particules &p, uint taille, f64 t, f64 gamma, f64 t0){
-    f64 val_thermostat_berendsen = gamma * ((t0 / t) - 1);
+    f64 val_thermostat_berendsen = 0.0;
+
+    if (t0 == 0)
+    {
+        std::cerr << "Thermostat Berendsen : Attention, la température initiale = 0" << std::endl;
+        exit(EXIT_FAILURE);
+    }
+    
+    val_thermostat_berendsen = -gamma * ((t / t0) - 1);
+    
     for(uint i = 0; i < taille ; i++){
         p.Mx[i] += val_thermostat_berendsen * p.Mx[i];
         p.My[i] += val_thermostat_berendsen * p.My[i];
         p.Mz[i] += val_thermostat_berendsen * p.Mz[i];
     }
 }
+
+void sauvegarder_trajectoire_PDB(const Particules &p, uint taille, const std::string& nom_fichier, uint iteration, uint XDIM, uint YDIM, uint ZDIM) {
+    std::ofstream fichier(nom_fichier, std::ios::app); 
+
+    if (!fichier.is_open()) {
+        std::cerr << "Erreur lors de l'ouverture du fichier " << nom_fichier << std::endl;
+        return;
+    }
+
+    // Écrire les lignes de tête CRYST1 et MODEL
+    fichier << "CRYST1 " << XDIM << " " << YDIM << " " << ZDIM << " 90.00 90.00 90.00 P 1\n";
+    fichier << "MODEL " << iteration << "\n";
+
+    // Écrire les coordonnées des particules
+    for (uint i = 0; i < taille; ++i) {
+        fichier << "ATOM  " << std::setw(5) << i + 1 << "  C   0     "
+                << std::fixed << std::setprecision(3)
+                << std::setw(8) << p.x[i]
+                << std::setw(8) << p.y[i]
+                << std::setw(8) << p.z[i]
+                << "  1.00  0.00           C\n";
+    }
+
+    // Écrire les lignes de fin TER et ENDMDL
+    fichier << "TER\n";
+    fichier << "ENDMDL\n";
+
+    fichier.close();
+}
+
+
+
 
 // Initialisation des force à 0
 void init_force(Particules &p, uint taille)
@@ -329,7 +289,7 @@ void init_force(Particules &p, uint taille)
 }
 
 // Initialisation des forces à 0
-void initialisation(Particules &p, unsigned int taille)
+void initialisation(Particules &p, uint taille)
 {
     p.fx.resize(taille);
     p.fy.resize(taille);
@@ -337,20 +297,11 @@ void initialisation(Particules &p, unsigned int taille)
     p.Mx.resize(taille);
     p.My.resize(taille);
     p.Mz.resize(taille);
-    p.vx.resize(taille);
-    p.vy.resize(taille);
-    p.vz.resize(taille);
     for (uint i = 0; i < taille; i++)
     {
-        p.fx[i] = 0.0;
-        p.fy[i] = 0.0;
-        p.fz[i] = 0.0;
         p.Mx[i] = 0.0;
         p.My[i] = 0.0;
         p.Mz[i] = 0.0;
-        p.vx[i] = 0.0;
-        p.vy[i] = 0.0;
-        p.vz[i] = 0.0;
     }
 }
 
