@@ -1,7 +1,6 @@
 #Compilateur et option de compilation
 CXX = g++
-CXXFLAGS = -g -Wall -Wextra -fsanitize=address -std=c++23
-
+CXXFLAGS = -g -O3 -funroll-loops -march=native -Wall -Wextra -fsanitize=address -std=c++23
 
 #Noms de fichier sources, objets et exécutable finale
 SOURCES = main.cpp function.cpp
